@@ -12,7 +12,7 @@ namespace Xamarin.MacOS
                 try
                 {
                     new System.Drawing.android.android();
-                    MissionPlanner.Program.RunStartupResourceSmokeTest();
+                    MissionPlanner.StartupResourceSmokeTest.Run();
 
                     Console.WriteLine("Mission Planner startup resource smoke test passed.");
                     return;

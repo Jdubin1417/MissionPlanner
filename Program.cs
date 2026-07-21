@@ -95,22 +95,6 @@ namespace MissionPlanner
             Start(args);
         }
 
-        public static void RunStartupResourceSmokeTest()
-        {
-            var imageConverter = System.ComponentModel.TypeDescriptor.GetConverter(typeof(Image));
-            var iconConverter = System.ComponentModel.TypeDescriptor.GetConverter(typeof(Icon));
-            var fontConverter = System.ComponentModel.TypeDescriptor.GetConverter(typeof(Font));
-
-            if (imageConverter.GetType().Name != "ImageConverter" ||
-                iconConverter.GetType().Name != "IconConverter" ||
-                fontConverter.GetType().Name != "FontConverter")
-                throw new InvalidOperationException("System.Drawing compatibility converters were not registered.");
-
-            var icon = Properties.Resources.mpdesktop;
-            if (icon == null || icon.ToBitmap() == null)
-                throw new InvalidOperationException("The mpdesktop icon resource could not be converted.");
-        }
-
         public static async void TraceMe(bool start = true)
         {
 #if !LIB
