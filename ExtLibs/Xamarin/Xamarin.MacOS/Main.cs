@@ -12,9 +12,7 @@ namespace Xamarin.MacOS
                 try
                 {
                     new System.Drawing.android.android();
-                    var icon = MissionPlanner.Properties.Resources.mpdesktop;
-                    if (icon == null || icon.ToBitmap() == null)
-                        throw new InvalidOperationException("The mpdesktop icon resource could not be converted.");
+                    MissionPlanner.Program.RunStartupResourceSmokeTest();
 
                     Console.WriteLine("Mission Planner startup resource smoke test passed.");
                     return;
