@@ -261,6 +261,118 @@ namespace MissionPlanner.GCSViews
         const int S_IWOTH = 0x2;
         const int S_IXOTH = 0x1;
 
+        private const string MacOSSITLPathEnvironmentVariable = "ARDUPILOT_SITL_PATH";
+
+        private string FindMacOSSITLImage(string filename)
+        {
+            var vehicle = Path.GetFileNameWithoutExtension(filename).ToLowerInvariant();
+            string[] binaryNames;
+            switch (vehicle)
+            {
+                case "arduplane":
+                    binaryNames = new[] {"arduplane", "ArduPlane"};
+                    break;
+                case "ardurover":
+                    binaryNames = new[] {"ardurover", "ArduRover"};
+                    break;
+                case "arduheli":
+                    binaryNames = new[] {"arducopter-heli", "arducopter", "ArduCopter"};
+                    break;
+                default:
+                    binaryNames = new[] {"arducopter", "ArduCopter"};
+                    break;
+            }
+
+            var searchPaths = new List<string>();
+            var configuredPath = Environment.GetEnvironmentVariable(MacOSSITLPathEnvironmentVariable);
+            if (!String.IsNullOrWhiteSpace(configuredPath))
+            {
+                if (File.Exists(configuredPath))
+                    searchPaths.Add(Path.GetDirectoryName(configuredPath));
+                else
+                    searchPaths.Add(configuredPath);
+            }
+
+            if (!String.IsNullOrWhiteSpace(BundledPath))
+                searchPaths.Add(BundledPath);
+
+            searchPaths.Add(sitldirectory);
+            searchPaths.Add(Path.Combine(Settings.GetRunningDirectory(), "sitl"));
+
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+            if (!String.IsNullOrWhiteSpace(home))
+            {
+                searchPaths.Add(Path.Combine(home, "ardupilot", "build", "sitl", "bin"));
+                searchPaths.Add(Path.Combine(home, "Documents", "ardupilot", "build", "sitl", "bin"));
+            }
+
+            var path = Environment.GetEnvironmentVariable("PATH") ?? "";
+            searchPaths.AddRange(path.Split(new[] {Path.PathSeparator}, StringSplitOptions.RemoveEmptyEntries));
+
+            foreach (var searchPath in searchPaths.Where(a => !String.IsNullOrWhiteSpace(a)).Distinct())
+            {
+                foreach (var binaryName in binaryNames)
+                {
+                    var candidate = Path.Combine(searchPath, binaryName);
+                    if (!File.Exists(candidate))
+                        continue;
+
+                    if (!IsMachO(candidate))
+                    {
+                        log.Warn("Ignoring non-macOS SITL binary " + candidate);
+                        continue;
+                    }
+
+                    MakeExecutable(candidate);
+                    log.Info("Using macOS SITL binary " + candidate);
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool IsMachO(string path)
+        {
+            try
+            {
+                var magic = new byte[4];
+                using (var stream = File.OpenRead(path))
+                {
+                    if (stream.Read(magic, 0, magic.Length) != magic.Length)
+                        return false;
+                }
+
+                return
+                    magic.SequenceEqual(new byte[] {0xfe, 0xed, 0xfa, 0xce}) ||
+                    magic.SequenceEqual(new byte[] {0xce, 0xfa, 0xed, 0xfe}) ||
+                    magic.SequenceEqual(new byte[] {0xfe, 0xed, 0xfa, 0xcf}) ||
+                    magic.SequenceEqual(new byte[] {0xcf, 0xfa, 0xed, 0xfe}) ||
+                    magic.SequenceEqual(new byte[] {0xca, 0xfe, 0xba, 0xbe}) ||
+                    magic.SequenceEqual(new byte[] {0xbe, 0xba, 0xfe, 0xca});
+            }
+            catch (Exception ex)
+            {
+                log.Warn("Unable to inspect SITL binary " + path, ex);
+                return false;
+            }
+        }
+
+        private static void MakeExecutable(string path)
+        {
+            try
+            {
+                int permissions = S_IRUSR | S_IXUSR | S_IWUSR |
+                                  S_IRGRP | S_IXGRP |
+                                  S_IROTH | S_IXOTH;
+                chmod(path, permissions);
+            }
+            catch (Exception ex)
+            {
+                log.Warn("Unable to make SITL binary executable " + path, ex);
+            }
+        }
+
         /// <summary>
         /// Try BundlePath first, then arm manifest, then cygwin on server
         /// </summary>
@@ -271,6 +383,20 @@ namespace MissionPlanner.GCSViews
             // Save the selected version for next time
             Settings.Instance["sitl_download_version"] = cmb_version.SelectedIndex.ToString();
             var release_type = cmb_version.SelectedValue as APFirmware.RELEASE_TYPES?;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                var nativeSITL = FindMacOSSITLImage(filename);
+                if (!String.IsNullOrEmpty(nativeSITL))
+                    return nativeSITL;
+
+                throw new PlatformNotSupportedException(
+                    "ArduPilot does not publish downloadable macOS SITL binaries. " +
+                    "Build ArduPilot for SITL with './waf configure --board sitl' and './waf plane copter rover', " +
+                    "then set " + MacOSSITLPathEnvironmentVariable +
+                    " to the resulting ardupilot/build/sitl/bin directory before launching Mission Planner.");
+            }
+
             if (BundledPath != "")
             {
                 filename = filename.Replace(".elf", "");
@@ -337,8 +463,9 @@ namespace MissionPlanner.GCSViews
                 }
             }
 
-            if (RuntimeInformation.OSArchitecture == Architecture.Arm ||
-               RuntimeInformation.OSArchitecture == Architecture.Arm64)
+            if ((RuntimeInformation.OSArchitecture == Architecture.Arm ||
+               RuntimeInformation.OSArchitecture == Architecture.Arm64) &&
+                RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 var type = APFirmware.MAV_TYPE.Copter;
                 if (filename.ToLower().Contains("copter"))
@@ -653,11 +780,7 @@ namespace MissionPlanner.GCSViews
 
             Directory.CreateDirectory(simdir);
 
-            string path = Environment.GetEnvironmentVariable("PATH");
-
-            Environment.SetEnvironmentVariable("PATH", sitldirectory + ";" + simdir + ";" + path, EnvironmentVariableTarget.Process);
-
-            Environment.SetEnvironmentVariable("HOME", simdir, EnvironmentVariableTarget.Process);
+            string path = Environment.GetEnvironmentVariable("PATH") ?? "";
 
             ProcessStartInfo exestart = new ProcessStartInfo();
             exestart.FileName = exepath;
@@ -666,9 +789,12 @@ namespace MissionPlanner.GCSViews
             exestart.WindowStyle = ProcessWindowStyle.Minimized;
             Console.WriteLine("sitl: {0} {1} {2}", exestart.WorkingDirectory, exestart.FileName,
                 exestart.Arguments);
-            if (RuntimeInformation.OSArchitecture == Architecture.X64 ||
-                RuntimeInformation.OSArchitecture == Architecture.X86)
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                Environment.SetEnvironmentVariable("PATH",
+                    sitldirectory + Path.PathSeparator + simdir + Path.PathSeparator + path,
+                    EnvironmentVariableTarget.Process);
+                Environment.SetEnvironmentVariable("HOME", simdir, EnvironmentVariableTarget.Process);
                 exestart.UseShellExecute = true;
 
                 try
@@ -687,6 +813,9 @@ namespace MissionPlanner.GCSViews
                 exestart.UseShellExecute = false;
                 exestart.RedirectStandardOutput = true;
                 exestart.RedirectStandardError = true;
+                exestart.EnvironmentVariables["PATH"] =
+                    sitldirectory + Path.PathSeparator + simdir + Path.PathSeparator + path;
+                exestart.EnvironmentVariables["HOME"] = simdir;
 
                 try
                 {

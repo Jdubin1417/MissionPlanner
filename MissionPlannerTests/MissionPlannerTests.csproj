@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <OutputType>Library</OutputType>
+    <IsTestProject>true</IsTestProject>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
   <ItemGroup>
@@ -13,7 +14,7 @@
     <ProjectReference Include="..\MissionPlanner.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.TestPlatform">
+    <PackageReference Include="Microsoft.NET.Test.Sdk">
       <Version>17.3.2</Version>
     </PackageReference>
     <PackageReference Include="MSTest.TestAdapter">

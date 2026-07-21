@@ -67,34 +67,7 @@ jobs:
         shell: bash
         run: |
           app="ExtLibs/Xamarin/Xamarin.MacOS/bin/Release/Mission Planner.app"
-          log="${RUNNER_TEMP}/mission-planner-smoke.log"
-
-          "$app/Contents/MacOS/Mission Planner" >"$log" 2>&1 &
-          pid=$!
-          cleanup() {
-            kill "$pid" 2>/dev/null || true
-            wait "$pid" 2>/dev/null || true
-          }
-          trap cleanup EXIT
-
-          for attempt in {1..60}; do
-            if grep -q "start AutoConnect" "$log"; then
-              echo "Mission Planner reached its main startup path."
-              exit 0
-            fi
-
-            if ! kill -0 "$pid" 2>/dev/null; then
-              echo "Mission Planner exited before startup completed."
-              cat "$log"
-              exit 1
-            fi
-
-            sleep 1
-          done
-
-          echo "Mission Planner did not finish startup within 60 seconds."
-          cat "$log"
-          exit 1
+          "$app/Contents/MacOS/Mission Planner" --startup-resource-smoke-test
 
       - name: Package
         shell: pwsh
@@ -111,7 +84,7 @@ jobs:
             ExtLibs/Xamarin/Xamarin.MacOS/bin/Release/*.dmg
 
       - uses: "marvinpinto/action-automatic-releases@v1.2.1"
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "osxlatest"

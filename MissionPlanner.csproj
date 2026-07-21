@@ -39,6 +39,9 @@
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 		<BaseIntermediateOutputPath>obj3\</BaseIntermediateOutputPath>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <DefineConstants>$(DefineConstants);NO_WINUSB</DefineConstants>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <OutputPath>bin\Debug\net461\</OutputPath>
     <GenerateSerializationAssemblies>Auto</GenerateSerializationAssemblies>
@@ -753,7 +756,7 @@
     <Content Include="Drivers\devcon.exe">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Drivers\DriverCleanup.exe">
+    <Content Include="Drivers\DriverCleanup.exe" Condition="'$(OS)' == 'Windows_NT'">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="Drivers\Holybro.inf">
@@ -1044,7 +1047,7 @@
       <DependentUpon Condition="Exists($([System.String]::Copy('%(Filename)').ToLower().Replace('.designer','.cs')))">$([System.Text.RegularExpressions.Regex]::Replace('%(FileName)', '\.[a-zA-Z\-]+', '')).cs</DependentUpon>
     </Compile>
   </ItemGroup>
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(OS)' == 'Windows_NT'">
     <Exec Command="&quot;$(TargetDir)version.exe&quot; &quot;$(TargetPath)&quot; &gt; &quot;$(TargetDir)version.txt&quot;&#xD;&#xA;copy &quot;$(ProjectDir)ExtLibs\System.Speech.dll&quot; &quot;$(TargetDir)&quot;&#xD;&#xA;&#xD;&#xA;cd &quot;$(TargetDir)&quot;&#xD;&#xA;for /f %%f in ('dir /a-d /b plugins') do if exist .\%%f del .\plugins\%%f&#xD;&#xA;" />
   </Target>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">

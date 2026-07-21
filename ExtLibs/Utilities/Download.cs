@@ -23,10 +23,10 @@ namespace MissionPlanner.Utilities
             return DateTime.MinValue;
         }
 
-        public static int ContentLength(this HttpContentHeaders headers)
+        public static long ContentLength(this HttpContentHeaders headers)
         {
             if (headers.Any(h => h.Key.Equals("Content-Length")))
-                return int.Parse(headers.First(h => h.Key.Equals("Content-Length")).Value.First());
+                return long.Parse(headers.First(h => h.Key.Equals("Content-Length")).Value.First());
             return -1;
         }
     }
@@ -472,7 +472,8 @@ namespace MissionPlanner.Utilities
 
                     if (lasthttpmod < lastfilewrite)
                     {
-                        if (response.Content.Headers.ContentLength() == new FileInfo(saveto).Length)
+                        var contentLength = response.Content.Headers.ContentLength();
+                        if (contentLength >= 0 && contentLength == new FileInfo(saveto).Length)
                         {
                             lock (log)
                                 log.Info("got LastModified " + saveto + " " + (response.Content.Headers).LastModified() +
@@ -485,8 +486,9 @@ namespace MissionPlanner.Utilities
                 // Get the stream containing content returned by the server.
                 Stream dataStream = response.Content.ReadAsStreamAsync().Result;
 
-                long bytes = response.Content.Headers.ContentLength();
-                long contlen = bytes;
+                long contlen = response.Content.Headers.ContentLength();
+                long bytes = contlen;
+                bool hasContentLength = contlen >= 0;
 
                 byte[] buf1 = new byte[1024];
 
@@ -499,30 +501,39 @@ namespace MissionPlanner.Utilities
                 DateTime starttime = DateTime.Now;
                 int got = 0;
 
-                while (dataStream.CanRead && bytes > 0)
+                while (dataStream.CanRead && (!hasContentLength || bytes > 0))
                 {
                     int len = dataStream.Read(buf1, 0, buf1.Length);
-                    bytes -= len;
+                    if (len == 0)
+                        break;
+
+                    if (hasContentLength)
+                        bytes -= len;
                     got += len;
                     fs.Write(buf1, 0, len);
 
                     var elapsed = (DateTime.Now - starttime).TotalSeconds;
-                    var percent = ((got / (float)contlen) * 100.0f);
                     if (lastupdate.Second != DateTime.Now.Second)
                     {
                         lastupdate = DateTime.Now;
-                        Console.WriteLine("{0} bps {1} {2}s {3}% of {4}     \r", got / elapsed, got, elapsed,
-                            percent, contlen);
-                        var timeleft = TimeSpan.FromSeconds(((elapsed / percent) * (100 - percent)));
-                        status?.Invoke((int)percent,
-                            "Downloading.. ETA: " +
-                            //DateTime.Now.AddSeconds(((elapsed / percent) * (100 - percent))).ToShortTimeString()
-                            formatTimeSpan(timeleft)
-                        );
+                        if (hasContentLength)
+                        {
+                            var percent = ((got / (float)contlen) * 100.0f);
+                            Console.WriteLine("{0} bps {1} {2}s {3}% of {4}     \r", got / elapsed, got, elapsed,
+                                percent, contlen);
+                            var timeleft = TimeSpan.FromSeconds(((elapsed / percent) * (100 - percent)));
+                            status?.Invoke((int)percent,
+                                "Downloading.. ETA: " + formatTimeSpan(timeleft));
+                        }
+                        else
+                        {
+                            Console.WriteLine("{0} bps {1} {2}s     \r", got / elapsed, got, elapsed);
+                            status?.Invoke(0, "Downloading.. " + got + " bytes");
+                        }
                     }
                 }
 
-                if (fs.Length != contlen)
+                if (hasContentLength && fs.Length != contlen)
                 {
                     lock (log)
                         log.Info("getFilefromNet(): " + "File size mismatch " + fs.Length + " vs " + contlen);
@@ -541,6 +552,8 @@ namespace MissionPlanner.Utilities
                     File.Delete(saveto);
                 }
                 File.Move(saveto + ".new", saveto);
+
+                status?.Invoke(100, "Complete");
 
                 return true;
             }
