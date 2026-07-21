@@ -238,7 +238,8 @@ namespace MissionPlanner
 
             try
             {
-                if (!MainV2.Android)
+                // Xamarin.Mac links libSkiaSharp.dylib into the app; libdl.so is Linux-only.
+                if (!MainV2.Android && !RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 {
                     var file = MissionPlanner.Utilities.NativeLibrary.GetLibraryPathname("libSkiaSharp");
                     log.Info(file);
