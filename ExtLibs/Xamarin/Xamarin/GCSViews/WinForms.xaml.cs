@@ -46,6 +46,7 @@ namespace Xamarin.GCSViews
         public WinForms()
         {
             InitializeComponent();
+            InitializeCanvas();
 
             size = Device.Info.ScaledScreenSize;
             Console.WriteLine("ScaledScreenSize " + size);
@@ -214,6 +215,44 @@ namespace Xamarin.GCSViews
                     return Task.Run(async () => { return await Test.UsbDevices.GetDeviceInfoList(); }).Result;
                 };
             }
+        }
+
+        private SKCanvasView canvasView;
+        private SKGLView glCanvasView;
+
+        private bool HasCanvas => canvasView != null || glCanvasView != null;
+
+        private SKSize CanvasSize => canvasView != null ? canvasView.CanvasSize : glCanvasView.CanvasSize;
+
+        private void InitializeCanvas()
+        {
+            Xamarin.Forms.View view;
+            if (Device.RuntimePlatform == Device.macOS)
+            {
+                canvasView = new SKCanvasView {EnableTouchEvents = true};
+                canvasView.Touch += SkCanvasView_Touch;
+                canvasView.PaintSurface += SkCanvasView_PaintSurface;
+                view = canvasView;
+            }
+            else
+            {
+                glCanvasView = new SKGLView {EnableTouchEvents = true};
+                glCanvasView.Touch += SkCanvasView_Touch;
+                glCanvasView.PaintSurface += SkCanvasView_PaintSurface;
+                view = glCanvasView;
+            }
+
+            AbsoluteLayout.SetLayoutFlags(view, AbsoluteLayoutFlags.All);
+            AbsoluteLayout.SetLayoutBounds(view, new Xamarin.Forms.Rectangle(0, 0, 1, 1));
+            CanvasHost.Children.Insert(0, view);
+        }
+
+        private void InvalidateCanvasSurface()
+        {
+            if (canvasView != null)
+                canvasView.InvalidateSurface();
+            else
+                glCanvasView?.InvalidateSurface();
         }
 
         // Calculates the checksum for a sentence
@@ -421,7 +460,7 @@ namespace Xamarin.GCSViews
                 start = true;
             }
 
-            SkCanvasView.InvalidateSurface();
+            InvalidateCanvasSurface();
 
             Activate();
 
@@ -615,17 +654,18 @@ namespace Xamarin.GCSViews
                 Monitor.Enter(XplatUIMine.paintlock);
                 if (XplatUIMine.PaintPending)
                 {
-                    if (Instance.SkCanvasView != null)
+                    if (Instance.HasCanvas)
                     {
-                        Instance.scale = new Forms.Size((Instance.SkCanvasView.CanvasSize.Width / Instance.size.Width),
-                            (Instance.SkCanvasView.CanvasSize.Height / Instance.size.Height));
+                        var canvasSize = Instance.CanvasSize;
+                        Instance.scale = new Forms.Size((canvasSize.Width / Instance.size.Width),
+                            (canvasSize.Height / Instance.size.Height));
 
                         Screen.PrimaryScreen.WorkingArea =
                             new Rectangle(0, 0, (int) Instance.size.Width, (int) Instance.size.Height);
                         Screen.PrimaryScreen.Bounds =
                             new Rectangle(0, 0, (int) Instance.size.Width, (int) Instance.size.Height);
 
-                        Device.BeginInvokeOnMainThread(() => { Instance.SkCanvasView.InvalidateSurface(); });
+                        Device.BeginInvokeOnMainThread(Instance.InvalidateCanvasSurface);
                         XplatUIMine.PaintPending = false;
                     }
                 }

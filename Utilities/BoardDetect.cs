@@ -75,6 +75,19 @@ namespace MissionPlanner.Utilities
 
                         //if (port.ToLower() == item.name.ToLower())
                         {
+                            var px4Bootloader = Regex.Match(item.board ?? "",
+                                @"^PX4 BL FMU v(?<version>[1-5])\.x(?<pro> PRO)?$",
+                                RegexOptions.IgnoreCase);
+                            if (px4Bootloader.Success)
+                            {
+                                chbootloader = "fmuv" + px4Bootloader.Groups["version"].Value;
+                                if (px4Bootloader.Groups["pro"].Success)
+                                    chbootloader += "pro";
+
+                                log.Info("is a " + chbootloader + " bootloader");
+                                return boards.chbootloader;
+                            }
+
                             //USB\VID_0483&PID_DF11   -- stm32 bootloader
                             //USB\VID_1209&PID_5740   -- ardupilot chibios
 

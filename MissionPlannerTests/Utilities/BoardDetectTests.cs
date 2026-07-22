@@ -177,6 +177,8 @@ namespace MissionPlanner.Utilities.Tests
                 });
             if (ans != BoardDetect.boards.chbootloader)
                 Assert.Fail();
+
+            Assert.AreEqual("fmuv5", BoardDetect.chbootloader);
         }
 
         [TestMethod()]

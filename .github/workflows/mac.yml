@@ -63,11 +63,41 @@ jobs:
           dotnet --list-sdks
           msbuild -v:m -restore  -p:Configuration=Release "ExtLibs\Xamarin\Xamarin.MacOS\Xamarin.MacOS.csproj"
 
-      - name: Launch smoke test
+      - name: Startup smoke tests
         shell: bash
         run: |
           app="ExtLibs/Xamarin/Xamarin.MacOS/bin/Release/Mission Planner.app"
-          "$app/Contents/MacOS/Mission Planner" --startup-resource-smoke-test
+          executable="$app/Contents/MacOS/Mission Planner"
+          log="${RUNNER_TEMP}/mission-planner-smoke.log"
+
+          "$executable" --startup-resource-smoke-test
+
+          "$executable" >"$log" 2>&1 &
+          pid=$!
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..60}; do
+            if grep -q "start AutoConnect" "$log"; then
+              echo "Mission Planner reached its main startup path."
+              exit 0
+            fi
+
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "Mission Planner exited before startup completed."
+              cat "$log"
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          echo "Mission Planner did not finish startup within 60 seconds."
+          cat "$log"
+          exit 1
 
       - name: Package
         shell: pwsh
