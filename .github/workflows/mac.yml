@@ -101,11 +101,10 @@ jobs:
 
       - name: Package
         shell: pwsh
-        continue-on-error: true
         run: |
           npm install --global create-dmg
           cd ExtLibs/Xamarin/Xamarin.MacOS/bin/Release/
-          create-dmg 'Mission Planner.app' --dmg-title='Mission Planner'
+          create-dmg 'Mission Planner.app' --dmg-title='Mission Planner' --no-code-sign
           
       - uses: actions/upload-artifact@v4
         with:
